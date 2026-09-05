@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+capturas/*.jpg
+capturas/*.png
+!capturas/.gitkeep
+server.log

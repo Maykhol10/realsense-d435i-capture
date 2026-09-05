@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RealSense D435i — Captura de fotos</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <header>
+    <h1>📷 Captura de fotos — Intel RealSense D435i</h1>
+    <div id="estado" class="estado">Comprobando estado de la cámara…</div>
+  </header>
+
+  <main>
+    <section class="panel-video">
+      <div class="video-wrap">
+        <img id="video" src="{{ url_for('video_feed') }}" alt="Vista en vivo de la cámara" />
+      </div>
+      <div class="controles">
+        <button id="btn-iniciar" class="btn btn-secundario">Iniciar cámara</button>
+        <button id="btn-detener" class="btn btn-secundario">Detener cámara</button>
+        <button id="btn-capturar" class="btn btn-primario">📸 Tomar foto</button>
+      </div>
+      <p class="ayuda">También puedes presionar la barra espaciadora para capturar.</p>
+    </section>
+
+    <section class="panel-galeria">
+      <h2>Galería ({{ fotos|length }})</h2>
+      <div id="galeria" class="galeria">
+        {% for foto in fotos %}
+        <div class="miniatura" data-nombre="{{ foto }}">
+          <a href="{{ url_for('servir_captura', nombre=foto) }}" target="_blank">
+            <img src="{{ url_for('servir_captura', nombre=foto) }}" alt="{{ foto }}" />
+          </a>
+          <div class="miniatura-pie">
+            <span>{{ foto }}</span>
+            <button class="btn-eliminar" data-nombre="{{ foto }}" title="Eliminar">🗑️</button>
+          </div>
+        </div>
+        {% else %}
+        <p class="vacio">Todavía no hay fotos capturadas.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
