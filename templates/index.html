@@ -26,7 +26,15 @@
     </section>
 
     <section class="panel-galeria">
-      <h2>Galería ({{ fotos|length }})</h2>
+      <div class="galeria-encabezado">
+        <h2>Galería ({{ fotos|length }})</h2>
+        <a
+          id="btn-descargar-todas"
+          class="btn btn-secundario"
+          href="{{ url_for('api_descargar_todas') }}"
+          {% if not fotos %}aria-disabled="true"{% endif %}
+        >⬇️ Descargar todas (.zip)</a>
+      </div>
       <div id="galeria" class="galeria">
         {% for foto in fotos %}
         <div class="miniatura" data-nombre="{{ foto }}">
@@ -35,7 +43,10 @@
           </a>
           <div class="miniatura-pie">
             <span>{{ foto }}</span>
-            <button class="btn-eliminar" data-nombre="{{ foto }}" title="Eliminar">🗑️</button>
+            <div class="miniatura-acciones">
+              <a class="btn-descargar" href="{{ url_for('api_descargar', nombre=foto) }}" title="Descargar">⬇️</a>
+              <button class="btn-eliminar" data-nombre="{{ foto }}" title="Eliminar">🗑️</button>
+            </div>
           </div>
         </div>
         {% else %}

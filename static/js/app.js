@@ -3,6 +3,7 @@ const btnCapturar = document.getElementById("btn-capturar");
 const btnIniciar = document.getElementById("btn-iniciar");
 const btnDetener = document.getElementById("btn-detener");
 const galeria = document.getElementById("galeria");
+const btnDescargarTodas = document.getElementById("btn-descargar-todas");
 
 function mostrarFlash(mensaje) {
   let flash = document.querySelector(".flash");
@@ -50,11 +51,15 @@ function agregarMiniatura(nombre) {
     </a>
     <div class="miniatura-pie">
       <span>${nombre}</span>
-      <button class="btn-eliminar" data-nombre="${nombre}" title="Eliminar">🗑️</button>
+      <div class="miniatura-acciones">
+        <a class="btn-descargar" href="/api/descargar/${nombre}" title="Descargar">⬇️</a>
+        <button class="btn-eliminar" data-nombre="${nombre}" title="Eliminar">🗑️</button>
+      </div>
     </div>`;
   const vacio = galeria.querySelector(".vacio");
   if (vacio) vacio.remove();
   galeria.prepend(div);
+  btnDescargarTodas.removeAttribute("aria-disabled");
 }
 
 async function capturarFoto() {
@@ -81,6 +86,13 @@ async function eliminarFoto(nombre, elemento) {
   if (data.ok) {
     elemento.remove();
     mostrarFlash("Foto eliminada");
+    if (!galeria.querySelector(".miniatura")) {
+      btnDescargarTodas.setAttribute("aria-disabled", "true");
+      const p = document.createElement("p");
+      p.className = "vacio";
+      p.textContent = "Todavía no hay fotos capturadas.";
+      galeria.appendChild(p);
+    }
   }
 }
 
@@ -94,6 +106,13 @@ btnIniciar.addEventListener("click", async () => {
 btnDetener.addEventListener("click", async () => {
   await fetch("/api/detener", { method: "POST" });
   actualizarEstado();
+});
+
+btnDescargarTodas.addEventListener("click", (e) => {
+  if (btnDescargarTodas.getAttribute("aria-disabled") === "true") {
+    e.preventDefault();
+    mostrarFlash("No hay fotos para descargar");
+  }
 });
 
 galeria.addEventListener("click", (e) => {

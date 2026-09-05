@@ -10,9 +10,11 @@ Requiere el SDK pyrealsense2 (librealsense) y una cámara D435i conectada
 por USB 3.
 """
 
+import io
 import os
 import threading
 import time
+import zipfile
 from datetime import datetime
 
 import cv2
@@ -23,6 +25,7 @@ from flask import (
     jsonify,
     redirect,
     render_template,
+    send_file,
     send_from_directory,
     url_for,
 )
@@ -189,6 +192,37 @@ def api_capturar():
 @app.route("/capturas/<path:nombre>")
 def servir_captura(nombre):
     return send_from_directory(CAPTURES_DIR, nombre)
+
+
+@app.route("/api/descargar/<path:nombre>")
+def api_descargar(nombre):
+    ruta = os.path.join(CAPTURES_DIR, nombre)
+    if not os.path.isfile(ruta) or os.path.dirname(ruta) != CAPTURES_DIR:
+        return jsonify({"ok": False, "error": "Archivo no encontrado"}), 404
+    return send_from_directory(CAPTURES_DIR, nombre, as_attachment=True)
+
+
+@app.route("/api/descargar_todas")
+def api_descargar_todas():
+    fotos = sorted(
+        f for f in os.listdir(CAPTURES_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))
+    )
+    if not fotos:
+        return jsonify({"ok": False, "error": "No hay fotos para descargar"}), 400
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for nombre in fotos:
+            zf.write(os.path.join(CAPTURES_DIR, nombre), arcname=nombre)
+    buffer.seek(0)
+
+    nombre_zip = f"capturas_realsense_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return send_file(
+        buffer,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=nombre_zip,
+    )
 
 
 @app.route("/api/eliminar/<path:nombre>", methods=["POST"])

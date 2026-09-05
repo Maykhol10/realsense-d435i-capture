@@ -119,8 +119,29 @@ main {
 }
 
 .panel-galeria h2 {
-  margin-top: 0;
+  margin: 0;
   font-size: 1.05rem;
+}
+
+.galeria-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.galeria-encabezado .btn {
+  text-decoration: none;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.8rem;
+  display: inline-block;
+}
+
+.galeria-encabezado .btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .galeria {
@@ -161,11 +182,21 @@ main {
   white-space: nowrap;
 }
 
-.btn-eliminar {
+.miniatura-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.btn-eliminar,
+.btn-descargar {
   background: none;
   border: none;
   cursor: pointer;
   font-size: 0.9rem;
+  text-decoration: none;
+  line-height: 1;
 }
 
 .vacio {
