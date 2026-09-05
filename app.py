@@ -12,8 +12,10 @@ por USB 3.
 
 import io
 import os
+import sys
 import threading
 import time
+import webbrowser
 import zipfile
 from datetime import datetime
 
@@ -35,11 +37,30 @@ try:
 except ImportError:
     rs = None
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+def resource_path(relative):
+    """Ruta a recursos empaquetados (templates/static), tanto en modo
+    script como dentro de un .exe generado con PyInstaller."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, relative)
+
+
+def app_dir():
+    """Carpeta donde vive el .exe (o el script), para guardar 'capturas'
+    junto al programa en vez de en la carpeta temporal de extracción."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+BASE_DIR = app_dir()
 CAPTURES_DIR = os.path.join(BASE_DIR, "capturas")
 os.makedirs(CAPTURES_DIR, exist_ok=True)
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=resource_path("templates"),
+    static_folder=resource_path("static"),
+)
 
 
 class RealSenseCamera:
@@ -236,6 +257,7 @@ def api_eliminar(nombre):
 
 if __name__ == "__main__":
     camera.start()
+    threading.Timer(1.2, lambda: webbrowser.open("http://localhost:5000")).start()
     try:
         app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
     finally:

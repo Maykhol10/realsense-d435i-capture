@@ -5,3 +5,6 @@ capturas/*.jpg
 capturas/*.png
 !capturas/.gitkeep
 server.log
+build/
+dist/
+*.spec
