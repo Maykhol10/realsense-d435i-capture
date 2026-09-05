@@ -10,8 +10,12 @@ const badgeClase = document.getElementById("badge-clase");
 const chkRafaga = document.getElementById("chk-rafaga");
 const selIntervalo = document.getElementById("sel-intervalo");
 const datasetHeader = document.querySelector(".conteo-total");
+const flashCaptura = document.getElementById("flash-captura");
 
 let rafagaTimer = null;
+
+const ICONO_DESCARGAR = '<svg class="icon icon-sm"><use href="#i-download"/></svg>';
+const ICONO_ELIMINAR = '<svg class="icon icon-sm"><use href="#i-trash"/></svg>';
 
 function claseActual() {
   return (inputClase.value || "").trim() || "sin_clase";
@@ -42,7 +46,8 @@ async function actualizarEstado() {
       estadoEl.querySelector(".texto").textContent = "Error: " + data.error;
     } else if (data.activa) {
       estadoEl.className = "chip-estado ok";
-      estadoEl.querySelector(".texto").textContent = "Cámara activa";
+      const fuente = data.fuente === "webcam" ? "Webcam (respaldo)" : "RealSense D435i";
+      estadoEl.querySelector(".texto").textContent = `Cámara activa · ${fuente}`;
     } else {
       estadoEl.className = "chip-estado";
       estadoEl.querySelector(".texto").textContent = "Cámara detenida";
@@ -61,7 +66,7 @@ function actualizarContadorTotal() {
   const total = galeria.querySelectorAll(".miniatura").length;
   const clases = galeria.querySelectorAll(".grupo-clase").length;
   datasetHeader.textContent =
-    `${total} foto${total !== 1 ? "s" : ""} · ${clases} clase${clases !== 1 ? "s" : ""}`;
+    `${total} imagen${total !== 1 ? "es" : ""} · ${clases} clase${clases !== 1 ? "s" : ""}`;
   if (total > 0) {
     btnDescargarTodas.removeAttribute("aria-disabled");
   } else {
@@ -99,11 +104,12 @@ function crearGrupoClase(clase) {
   details.open = true;
   details.innerHTML = `
     <summary>
+      <span class="grupo-chevron">▸</span>
       <span class="grupo-titulo">${clase}</span>
       <span class="grupo-badge">0</span>
       <span class="grupo-acciones" onclick="event.stopPropagation()">
-        <a class="btn-mini" href="/api/descargar_clase/${encodeURIComponent(clase)}" title="Descargar esta clase">⬇️</a>
-        <button class="btn-mini btn-eliminar-clase" data-clase="${clase}" title="Eliminar clase completa">🗑️</button>
+        <a class="btn-mini" href="/api/descargar_clase/${encodeURIComponent(clase)}" title="Descargar esta clase">${ICONO_DESCARGAR}</a>
+        <button class="btn-mini btn-eliminar-clase" data-clase="${clase}" title="Eliminar clase completa">${ICONO_ELIMINAR}</button>
       </span>
     </summary>
     <div class="miniaturas" data-clase="${clase}"></div>`;
@@ -135,8 +141,8 @@ function agregarMiniatura(clase, nombre) {
     <div class="miniatura-pie">
       <span>${nombre}</span>
       <div class="miniatura-acciones">
-        <a class="btn-descargar" href="/api/descargar/${encodeURIComponent(clase)}/${encodeURIComponent(nombre)}" title="Descargar">⬇️</a>
-        <button class="btn-eliminar" data-clase="${clase}" data-nombre="${nombre}" title="Eliminar">🗑️</button>
+        <a class="btn-descargar" href="/api/descargar/${encodeURIComponent(clase)}/${encodeURIComponent(nombre)}" title="Descargar">${ICONO_DESCARGAR}</a>
+        <button class="btn-eliminar" data-clase="${clase}" data-nombre="${nombre}" title="Eliminar">${ICONO_ELIMINAR}</button>
       </div>
     </div>`;
   contenedor.prepend(div);
@@ -144,6 +150,12 @@ function agregarMiniatura(clase, nombre) {
 
   actualizarContadorTotal();
   actualizarBarraDistribucion();
+}
+
+function dispararFlash() {
+  flashCaptura.classList.remove("disparo");
+  void flashCaptura.offsetWidth;
+  flashCaptura.classList.add("disparo");
 }
 
 async function capturarFoto({ silencioso = false } = {}) {
@@ -157,8 +169,9 @@ async function capturarFoto({ silencioso = false } = {}) {
     });
     const data = await res.json();
     if (data.ok) {
+      dispararFlash();
       agregarMiniatura(data.clase, data.archivo);
-      if (!silencioso) mostrarFlash(`Foto guardada en "${data.clase}"`);
+      if (!silencioso) mostrarFlash(`guardado en "${data.clase}"`);
 
       const opcion = document.querySelector(`#lista-clases option[value="${CSS.escape(data.clase)}"]`);
       if (!opcion) {
@@ -212,7 +225,7 @@ async function eliminarFoto(clase, nombre, elemento) {
     if (!galeria.querySelector(".miniatura")) {
       const p = document.createElement("p");
       p.className = "vacio";
-      p.textContent = 'Todavía no hay fotos. Escribe una clase y presiona "Tomar foto" para empezar.';
+      p.textContent = 'sin imágenes todavía — escribe una clase y presiona capturar';
       galeria.appendChild(p);
     }
     mostrarFlash("Foto eliminada");
@@ -232,7 +245,7 @@ async function eliminarClase(clase, elemento) {
     if (!galeria.querySelector(".miniatura")) {
       const p = document.createElement("p");
       p.className = "vacio";
-      p.textContent = 'Todavía no hay fotos. Escribe una clase y presiona "Tomar foto" para empezar.';
+      p.textContent = 'sin imágenes todavía — escribe una clase y presiona capturar';
       galeria.appendChild(p);
     }
     mostrarFlash(`Clase "${clase}" eliminada`);

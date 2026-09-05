@@ -1,8 +1,7 @@
 venv/
 __pycache__/
 *.pyc
-capturas/*.jpg
-capturas/*.png
+capturas/*
 !capturas/.gitkeep
 server.log
 build/

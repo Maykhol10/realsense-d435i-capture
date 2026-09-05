@@ -3,21 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RealSense D435i — Captura de dataset</title>
+  <title>Captura de dataset — D435i</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
 <body>
+
+  <svg style="display:none">
+    <symbol id="i-shutter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+      <circle cx="12" cy="12" r="8.5"/>
+      <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
+      <path d="M12 3v11.5"/>
+      <path d="M7.5 10.5 12 15l4.5-4.5"/>
+      <path d="M4.5 18.5h15"/>
+    </symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square">
+      <path d="M5 7h14"/>
+      <path d="M9.5 7V5h5v2"/>
+      <path d="M7 7l1 12.5h8L17 7"/>
+    </symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="miter">
+      <path d="M7 5.5v13l11-6.5-11-6.5z"/>
+    </symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+      <rect x="6.5" y="6.5" width="11" height="11"/>
+    </symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="miter">
+      <path d="M13 3 5 13.5h5.5L11 21l8-10.5h-5.5L13 3z"/>
+    </symbol>
+  </svg>
+
   <header class="topbar">
     <div class="marca">
-      <span class="marca-icono">📷</span>
+      <span class="marca-icono"><svg class="icon"><use href="#i-shutter"/></svg></span>
       <div>
-        <h1>Captura de dataset — RealSense D435i</h1>
-        <p class="subtitulo">Fotos en color para entrenamiento de reconocimiento de imágenes</p>
+        <h1>Captura de dataset</h1>
+        <p class="subtitulo">Intel RealSense D435i · adquisición de imágenes para clasificación</p>
       </div>
     </div>
     <div id="estado" class="chip-estado">
       <span class="punto"></span>
-      <span class="texto">Comprobando cámara…</span>
+      <span class="texto">comprobando cámara</span>
     </div>
   </header>
 
@@ -25,18 +52,22 @@
     <section class="panel panel-video">
       <div class="video-wrap">
         <img id="video" src="{{ url_for('video_feed') }}" alt="Vista en vivo de la cámara" />
+        <div id="flash-captura" class="flash-captura"></div>
+        <div class="marco-esquinas">
+          <span></span><span></span><span></span><span></span>
+        </div>
         <div class="video-overlay">
           <span id="badge-clase" class="badge-clase">sin_clase</span>
         </div>
       </div>
 
       <div class="captura-form">
-        <label for="input-clase">Clase / etiqueta actual</label>
+        <label for="input-clase">clase actual</label>
         <div class="fila-clase">
           <input
             id="input-clase"
             type="text"
-            placeholder="ej. manzana, botella, mano_abierta…"
+            placeholder="manzana, botella, mano_abierta…"
             list="lista-clases"
             autocomplete="off"
           />
@@ -45,16 +76,16 @@
           </datalist>
         </div>
         <p class="ayuda">
-          Las fotos de esta clase se guardan en <code>capturas/&lt;clase&gt;/</code>.
-          Cambia el texto para pasar a otra clase sin detener la cámara.
+          se guarda en <code>capturas/&lt;clase&gt;/</code> — cambia el texto para pasar de clase sin detener la cámara.
         </p>
       </div>
 
       <div class="controles">
-        <button id="btn-iniciar" class="btn btn-secundario">Iniciar cámara</button>
-        <button id="btn-detener" class="btn btn-secundario">Detener cámara</button>
-        <button id="btn-capturar" class="btn btn-primario">
-          <span class="btn-icono">📸</span> Tomar foto
+        <button id="btn-iniciar" class="btn btn-linea"><svg class="icon"><use href="#i-play"/></svg> iniciar</button>
+        <button id="btn-detener" class="btn btn-linea"><svg class="icon"><use href="#i-stop"/></svg> detener</button>
+        <button id="btn-capturar" class="btn btn-disparo">
+          <svg class="icon"><use href="#i-shutter"/></svg>
+          capturar
           <kbd>espacio</kbd>
         </button>
       </div>
@@ -62,30 +93,30 @@
       <div class="modo-rafaga">
         <label class="switch">
           <input type="checkbox" id="chk-rafaga" />
-          <span>Modo ráfaga</span>
+          <span><svg class="icon icon-sm"><use href="#i-bolt"/></svg> ráfaga</span>
         </label>
         <select id="sel-intervalo">
-          <option value="300">cada 0.3s</option>
-          <option value="500" selected>cada 0.5s</option>
-          <option value="1000">cada 1s</option>
-          <option value="2000">cada 2s</option>
+          <option value="300">0.3s</option>
+          <option value="500" selected>0.5s</option>
+          <option value="1000">1s</option>
+          <option value="2000">2s</option>
         </select>
-        <span class="ayuda-rafaga">Mantén la pose y captura varias fotos seguidas automáticamente.</span>
+        <span class="ayuda-rafaga">captura continua mientras mantienes la pose</span>
       </div>
     </section>
 
     <section class="panel panel-dataset">
       <div class="dataset-encabezado">
         <div>
-          <h2>Dataset</h2>
-          <p class="conteo-total">{{ total }} foto{{ 's' if total != 1 else '' }} · {{ clases|length }} clase{{ 's' if clases|length != 1 else '' }}</p>
+          <h2>dataset</h2>
+          <p class="conteo-total">{{ total }} imagen{{ 'es' if total != 1 else '' }} · {{ clases|length }} clase{{ 's' if clases|length != 1 else '' }}</p>
         </div>
         <a
           id="btn-descargar-todas"
-          class="btn btn-secundario"
+          class="btn btn-linea"
           href="{{ url_for('api_descargar_todas') }}"
           {% if total == 0 %}aria-disabled="true"{% endif %}
-        >⬇️ Descargar dataset (.zip)</a>
+        ><svg class="icon"><use href="#i-download"/></svg> exportar .zip</a>
       </div>
 
       <div id="distribucion" class="distribucion">
@@ -106,11 +137,12 @@
         {% for c in clases %}
         <details class="grupo-clase" open>
           <summary>
+            <span class="grupo-chevron">▸</span>
             <span class="grupo-titulo">{{ c }}</span>
             <span class="grupo-badge">{{ dataset[c]|length }}</span>
             <span class="grupo-acciones" onclick="event.stopPropagation()">
-              <a class="btn-mini" href="{{ url_for('api_descargar_clase', clase=c) }}" title="Descargar esta clase">⬇️</a>
-              <button class="btn-mini btn-eliminar-clase" data-clase="{{ c }}" title="Eliminar clase completa">🗑️</button>
+              <a class="btn-mini" href="{{ url_for('api_descargar_clase', clase=c) }}" title="Descargar esta clase"><svg class="icon icon-sm"><use href="#i-download"/></svg></a>
+              <button class="btn-mini btn-eliminar-clase" data-clase="{{ c }}" title="Eliminar clase completa"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
             </span>
           </summary>
           <div class="miniaturas" data-clase="{{ c }}">
@@ -122,8 +154,8 @@
               <div class="miniatura-pie">
                 <span>{{ foto }}</span>
                 <div class="miniatura-acciones">
-                  <a class="btn-descargar" href="{{ url_for('api_descargar', clase=c, nombre=foto) }}" title="Descargar">⬇️</a>
-                  <button class="btn-eliminar" data-clase="{{ c }}" data-nombre="{{ foto }}" title="Eliminar">🗑️</button>
+                  <a class="btn-descargar" href="{{ url_for('api_descargar', clase=c, nombre=foto) }}" title="Descargar"><svg class="icon icon-sm"><use href="#i-download"/></svg></a>
+                  <button class="btn-eliminar" data-clase="{{ c }}" data-nombre="{{ foto }}" title="Eliminar"><svg class="icon icon-sm"><use href="#i-trash"/></svg></button>
                 </div>
               </div>
             </div>
@@ -131,7 +163,7 @@
           </div>
         </details>
         {% else %}
-        <p class="vacio">Todavía no hay fotos. Escribe una clase y presiona "Tomar foto" para empezar.</p>
+        <p class="vacio">sin imágenes todavía — escribe una clase y presiona capturar</p>
         {% endfor %}
       </div>
     </section>

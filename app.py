@@ -121,6 +121,8 @@ class RealSenseCamera:
         self.fps = fps
         self.pipeline = None
         self.config = None
+        self.webcam = None
+        self.fuente = None  # "realsense" o "webcam"
         self.running = False
         self.lock = threading.Lock()
         self.last_frame = None  # numpy array BGR
@@ -128,24 +130,14 @@ class RealSenseCamera:
         self.thread = None
 
     def start(self):
-        if rs is None:
-            self.error = (
-                "El paquete 'pyrealsense2' no está instalado. "
-                "Instálalo con: pip install pyrealsense2"
-            )
-            return False
         if self.running:
             return True
-        try:
-            self.pipeline = rs.pipeline()
-            self.config = rs.config()
-            self.config.enable_stream(
-                rs.stream.color, self.width, self.height, rs.format.bgr8, self.fps
-            )
-            self.pipeline.start(self.config)
-        except Exception as exc:  # noqa: BLE001
-            self.error = f"No se pudo iniciar la cámara: {exc}"
-            self.pipeline = None
+
+        if self._iniciar_realsense():
+            self.fuente = "realsense"
+        elif self._iniciar_webcam():
+            self.fuente = "webcam"
+        else:
             return False
 
         self.error = None
@@ -154,14 +146,53 @@ class RealSenseCamera:
         self.thread.start()
         return True
 
+    def _iniciar_realsense(self):
+        if rs is None:
+            self.error = (
+                "El paquete 'pyrealsense2' no está instalado. "
+                "Instálalo con: pip install pyrealsense2"
+            )
+            return False
+        try:
+            self.pipeline = rs.pipeline()
+            self.config = rs.config()
+            self.config.enable_stream(
+                rs.stream.color, self.width, self.height, rs.format.bgr8, self.fps
+            )
+            self.pipeline.start(self.config)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            self.error = f"RealSense no disponible: {exc}"
+            self.pipeline = None
+            return False
+
+    def _iniciar_webcam(self):
+        cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        if not cam.isOpened():
+            cam.release()
+            self.error = (self.error or "") + " | No se encontró ninguna webcam de respaldo."
+            return False
+        ok, _ = cam.read()
+        if not ok:
+            cam.release()
+            self.error = (self.error or "") + " | La webcam de respaldo no entrega imagen."
+            return False
+        self.webcam = cam
+        return True
+
     def _update_loop(self):
         while self.running:
             try:
-                frames = self.pipeline.wait_for_frames(timeout_ms=5000)
-                color_frame = frames.get_color_frame()
-                if not color_frame:
-                    continue
-                image = np.asanyarray(color_frame.get_data())
+                if self.fuente == "realsense":
+                    frames = self.pipeline.wait_for_frames(timeout_ms=5000)
+                    color_frame = frames.get_color_frame()
+                    if not color_frame:
+                        continue
+                    image = np.asanyarray(color_frame.get_data())
+                else:
+                    ok, image = self.webcam.read()
+                    if not ok:
+                        continue
                 with self.lock:
                     self.last_frame = image
             except Exception as exc:  # noqa: BLE001
@@ -181,7 +212,11 @@ class RealSenseCamera:
                 self.pipeline.stop()
             except Exception:  # noqa: BLE001
                 pass
+        if self.webcam is not None:
+            self.webcam.release()
         self.pipeline = None
+        self.webcam = None
+        self.fuente = None
 
 
 camera = RealSenseCamera()
@@ -236,6 +271,7 @@ def api_estado():
             "activa": camera.running,
             "error": camera.error,
             "pyrealsense2_disponible": rs is not None,
+            "fuente": camera.fuente,
         }
     )
 
