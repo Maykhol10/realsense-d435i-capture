@@ -3,54 +3,135 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RealSense D435i — Captura de fotos</title>
+  <title>RealSense D435i — Captura de dataset</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
 <body>
-  <header>
-    <h1>📷 Captura de fotos — Intel RealSense D435i</h1>
-    <div id="estado" class="estado">Comprobando estado de la cámara…</div>
+  <header class="topbar">
+    <div class="marca">
+      <span class="marca-icono">📷</span>
+      <div>
+        <h1>Captura de dataset — RealSense D435i</h1>
+        <p class="subtitulo">Fotos en color para entrenamiento de reconocimiento de imágenes</p>
+      </div>
+    </div>
+    <div id="estado" class="chip-estado">
+      <span class="punto"></span>
+      <span class="texto">Comprobando cámara…</span>
+    </div>
   </header>
 
   <main>
-    <section class="panel-video">
+    <section class="panel panel-video">
       <div class="video-wrap">
         <img id="video" src="{{ url_for('video_feed') }}" alt="Vista en vivo de la cámara" />
+        <div class="video-overlay">
+          <span id="badge-clase" class="badge-clase">sin_clase</span>
+        </div>
       </div>
+
+      <div class="captura-form">
+        <label for="input-clase">Clase / etiqueta actual</label>
+        <div class="fila-clase">
+          <input
+            id="input-clase"
+            type="text"
+            placeholder="ej. manzana, botella, mano_abierta…"
+            list="lista-clases"
+            autocomplete="off"
+          />
+          <datalist id="lista-clases">
+            {% for c in clases %}<option value="{{ c }}"></option>{% endfor %}
+          </datalist>
+        </div>
+        <p class="ayuda">
+          Las fotos de esta clase se guardan en <code>capturas/&lt;clase&gt;/</code>.
+          Cambia el texto para pasar a otra clase sin detener la cámara.
+        </p>
+      </div>
+
       <div class="controles">
         <button id="btn-iniciar" class="btn btn-secundario">Iniciar cámara</button>
         <button id="btn-detener" class="btn btn-secundario">Detener cámara</button>
-        <button id="btn-capturar" class="btn btn-primario">📸 Tomar foto</button>
+        <button id="btn-capturar" class="btn btn-primario">
+          <span class="btn-icono">📸</span> Tomar foto
+          <kbd>espacio</kbd>
+        </button>
       </div>
-      <p class="ayuda">También puedes presionar la barra espaciadora para capturar.</p>
+
+      <div class="modo-rafaga">
+        <label class="switch">
+          <input type="checkbox" id="chk-rafaga" />
+          <span>Modo ráfaga</span>
+        </label>
+        <select id="sel-intervalo">
+          <option value="300">cada 0.3s</option>
+          <option value="500" selected>cada 0.5s</option>
+          <option value="1000">cada 1s</option>
+          <option value="2000">cada 2s</option>
+        </select>
+        <span class="ayuda-rafaga">Mantén la pose y captura varias fotos seguidas automáticamente.</span>
+      </div>
     </section>
 
-    <section class="panel-galeria">
-      <div class="galeria-encabezado">
-        <h2>Galería ({{ fotos|length }})</h2>
+    <section class="panel panel-dataset">
+      <div class="dataset-encabezado">
+        <div>
+          <h2>Dataset</h2>
+          <p class="conteo-total">{{ total }} foto{{ 's' if total != 1 else '' }} · {{ clases|length }} clase{{ 's' if clases|length != 1 else '' }}</p>
+        </div>
         <a
           id="btn-descargar-todas"
           class="btn btn-secundario"
           href="{{ url_for('api_descargar_todas') }}"
-          {% if not fotos %}aria-disabled="true"{% endif %}
-        >⬇️ Descargar todas (.zip)</a>
+          {% if total == 0 %}aria-disabled="true"{% endif %}
+        >⬇️ Descargar dataset (.zip)</a>
       </div>
-      <div id="galeria" class="galeria">
-        {% for foto in fotos %}
-        <div class="miniatura" data-nombre="{{ foto }}">
-          <a href="{{ url_for('servir_captura', nombre=foto) }}" target="_blank">
-            <img src="{{ url_for('servir_captura', nombre=foto) }}" alt="{{ foto }}" />
-          </a>
-          <div class="miniatura-pie">
-            <span>{{ foto }}</span>
-            <div class="miniatura-acciones">
-              <a class="btn-descargar" href="{{ url_for('api_descargar', nombre=foto) }}" title="Descargar">⬇️</a>
-              <button class="btn-eliminar" data-nombre="{{ foto }}" title="Eliminar">🗑️</button>
-            </div>
+
+      <div id="distribucion" class="distribucion">
+        {% for c in clases %}
+        <div class="barra-clase" data-clase="{{ c }}">
+          <div class="barra-etiqueta">
+            <span>{{ c }}</span>
+            <span class="barra-cantidad">{{ dataset[c]|length }}</span>
+          </div>
+          <div class="barra-fondo">
+            <div class="barra-relleno" style="width: {{ (dataset[c]|length / total * 100) if total else 0 }}%"></div>
           </div>
         </div>
+        {% endfor %}
+      </div>
+
+      <div id="galeria" class="galeria-clases">
+        {% for c in clases %}
+        <details class="grupo-clase" open>
+          <summary>
+            <span class="grupo-titulo">{{ c }}</span>
+            <span class="grupo-badge">{{ dataset[c]|length }}</span>
+            <span class="grupo-acciones" onclick="event.stopPropagation()">
+              <a class="btn-mini" href="{{ url_for('api_descargar_clase', clase=c) }}" title="Descargar esta clase">⬇️</a>
+              <button class="btn-mini btn-eliminar-clase" data-clase="{{ c }}" title="Eliminar clase completa">🗑️</button>
+            </span>
+          </summary>
+          <div class="miniaturas" data-clase="{{ c }}">
+            {% for foto in dataset[c] %}
+            <div class="miniatura" data-clase="{{ c }}" data-nombre="{{ foto }}">
+              <a href="{{ url_for('servir_captura', clase=c, nombre=foto) }}" target="_blank">
+                <img src="{{ url_for('servir_captura', clase=c, nombre=foto) }}" alt="{{ foto }}" loading="lazy" />
+              </a>
+              <div class="miniatura-pie">
+                <span>{{ foto }}</span>
+                <div class="miniatura-acciones">
+                  <a class="btn-descargar" href="{{ url_for('api_descargar', clase=c, nombre=foto) }}" title="Descargar">⬇️</a>
+                  <button class="btn-eliminar" data-clase="{{ c }}" data-nombre="{{ foto }}" title="Eliminar">🗑️</button>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </details>
         {% else %}
-        <p class="vacio">Todavía no hay fotos capturadas.</p>
+        <p class="vacio">Todavía no hay fotos. Escribe una clase y presiona "Tomar foto" para empezar.</p>
         {% endfor %}
       </div>
     </section>

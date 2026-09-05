@@ -1,10 +1,15 @@
 """
-Sistema de captura de fotos con Intel RealSense D435i (solo color/RGB).
+Sistema de captura de fotos con Intel RealSense D435i (solo color/RGB),
+pensado para armar datasets de entrenamiento de reconocimiento de imágenes.
 
 Ejecuta un servidor Flask que:
   - Muestra video en vivo del stream de color de la cámara.
-  - Permite tomar una foto (botón o tecla) y guardarla en /capturas.
-  - Muestra una galería de las fotos ya tomadas.
+  - Permite tomar una foto (botón o tecla) asignada a una clase/etiqueta,
+    guardándola en capturas/<clase>/.
+  - Muestra una galería agrupada por clase, con conteo por clase para
+    detectar datasets desbalanceados.
+  - Permite descargar fotos individuales, por clase (.zip) o todo el
+    dataset completo (.zip), preservando la estructura de carpetas.
 
 Requiere el SDK pyrealsense2 (librealsense) y una cámara D435i conectada
 por USB 3.
@@ -12,6 +17,7 @@ por USB 3.
 
 import io
 import os
+import re
 import sys
 import threading
 import time
@@ -24,18 +30,19 @@ import numpy as np
 from flask import (
     Flask,
     Response,
+    abort,
     jsonify,
-    redirect,
     render_template,
+    request,
     send_file,
     send_from_directory,
-    url_for,
 )
 
 try:
     import pyrealsense2 as rs
 except ImportError:
     rs = None
+
 
 def resource_path(relative):
     """Ruta a recursos empaquetados (templates/static), tanto en modo
@@ -54,6 +61,7 @@ def app_dir():
 
 BASE_DIR = app_dir()
 CAPTURES_DIR = os.path.join(BASE_DIR, "capturas")
+SIN_CLASE = "sin_clase"
 os.makedirs(CAPTURES_DIR, exist_ok=True)
 
 app = Flask(
@@ -61,6 +69,46 @@ app = Flask(
     template_folder=resource_path("templates"),
     static_folder=resource_path("static"),
 )
+
+_CLASE_INVALIDA = re.compile(r"[^a-zA-Z0-9_\-áéíóúÁÉÍÓÚñÑ ]+")
+
+
+def normalizar_clase(clase):
+    """Convierte el nombre de clase escrito por el usuario en un nombre de
+    carpeta seguro (sin rutas ni caracteres especiales)."""
+    clase = (clase or "").strip()
+    if not clase:
+        return SIN_CLASE
+    clase = _CLASE_INVALIDA.sub("", clase)
+    clase = clase.strip().replace(" ", "_")
+    return clase[:60] if clase else SIN_CLASE
+
+
+def ruta_segura(*partes):
+    """Resuelve una ruta dentro de CAPTURES_DIR y rechaza cualquier intento
+    de salir de esa carpeta (path traversal)."""
+    destino = os.path.abspath(os.path.join(CAPTURES_DIR, *partes))
+    raiz = os.path.abspath(CAPTURES_DIR)
+    if destino != raiz and not destino.startswith(raiz + os.sep):
+        abort(400)
+    return destino
+
+
+def listar_dataset():
+    """Devuelve {clase: [nombres_de_archivo,...]} ordenado, ignorando
+    carpetas/archivos que no sean imágenes."""
+    dataset = {}
+    for clase in sorted(os.listdir(CAPTURES_DIR)):
+        carpeta = os.path.join(CAPTURES_DIR, clase)
+        if not os.path.isdir(carpeta):
+            continue
+        fotos = sorted(
+            (f for f in os.listdir(carpeta) if f.lower().endswith((".jpg", ".jpeg", ".png"))),
+            reverse=True,
+        )
+        if fotos:
+            dataset[clase] = fotos
+    return dataset
 
 
 class RealSenseCamera:
@@ -166,8 +214,14 @@ def _make_placeholder(text):
 
 @app.route("/")
 def index():
-    fotos = sorted(os.listdir(CAPTURES_DIR), reverse=True)
-    return render_template("index.html", fotos=fotos, camara_activa=camera.running)
+    dataset = listar_dataset()
+    total = sum(len(fotos) for fotos in dataset.values())
+    return render_template(
+        "index.html",
+        dataset=dataset,
+        total=total,
+        clases=sorted(dataset.keys()),
+    )
 
 
 @app.route("/video_feed")
@@ -198,46 +252,97 @@ def api_detener():
     return jsonify({"ok": True})
 
 
+@app.route("/api/clases")
+def api_clases():
+    dataset = listar_dataset()
+    return jsonify(
+        {
+            "clases": [
+                {"nombre": clase, "cantidad": len(fotos)}
+                for clase, fotos in sorted(dataset.items())
+            ]
+        }
+    )
+
+
 @app.route("/api/capturar", methods=["POST"])
 def api_capturar():
     frame = camera.get_frame()
     if frame is None:
         return jsonify({"ok": False, "error": "No hay imagen disponible todavía."}), 400
 
-    nombre = f"foto_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-    ruta = os.path.join(CAPTURES_DIR, nombre)
-    cv2.imwrite(ruta, frame)
-    return jsonify({"ok": True, "archivo": nombre})
+    datos = request.get_json(silent=True) or {}
+    clase = normalizar_clase(datos.get("clase"))
+    carpeta_clase = ruta_segura(clase)
+    os.makedirs(carpeta_clase, exist_ok=True)
 
-
-@app.route("/capturas/<path:nombre>")
-def servir_captura(nombre):
-    return send_from_directory(CAPTURES_DIR, nombre)
-
-
-@app.route("/api/descargar/<path:nombre>")
-def api_descargar(nombre):
-    ruta = os.path.join(CAPTURES_DIR, nombre)
-    if not os.path.isfile(ruta) or os.path.dirname(ruta) != CAPTURES_DIR:
-        return jsonify({"ok": False, "error": "Archivo no encontrado"}), 404
-    return send_from_directory(CAPTURES_DIR, nombre, as_attachment=True)
-
-
-@app.route("/api/descargar_todas")
-def api_descargar_todas():
-    fotos = sorted(
-        f for f in os.listdir(CAPTURES_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))
+    nombre = f"{clase}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]}.jpg"
+    cv2.imwrite(os.path.join(carpeta_clase, nombre), frame)
+    return jsonify(
+        {
+            "ok": True,
+            "archivo": nombre,
+            "clase": clase,
+            "cantidad_clase": len(os.listdir(carpeta_clase)),
+        }
     )
+
+
+@app.route("/capturas/<clase>/<path:nombre>")
+def servir_captura(clase, nombre):
+    carpeta = ruta_segura(clase)
+    return send_from_directory(carpeta, nombre)
+
+
+@app.route("/api/descargar/<clase>/<path:nombre>")
+def api_descargar(clase, nombre):
+    carpeta = ruta_segura(clase)
+    ruta = os.path.join(carpeta, nombre)
+    if not os.path.isfile(ruta):
+        return jsonify({"ok": False, "error": "Archivo no encontrado"}), 404
+    return send_from_directory(carpeta, nombre, as_attachment=True)
+
+
+@app.route("/api/descargar_clase/<clase>")
+def api_descargar_clase(clase):
+    carpeta = ruta_segura(clase)
+    if not os.path.isdir(carpeta):
+        return jsonify({"ok": False, "error": "Clase no encontrada"}), 404
+
+    fotos = sorted(f for f in os.listdir(carpeta) if f.lower().endswith((".jpg", ".jpeg", ".png")))
     if not fotos:
-        return jsonify({"ok": False, "error": "No hay fotos para descargar"}), 400
+        return jsonify({"ok": False, "error": "Esa clase no tiene fotos"}), 400
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for nombre in fotos:
-            zf.write(os.path.join(CAPTURES_DIR, nombre), arcname=nombre)
+            zf.write(os.path.join(carpeta, nombre), arcname=os.path.join(clase, nombre))
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"{clase}.zip",
+    )
+
+
+@app.route("/api/descargar_todas")
+def api_descargar_todas():
+    dataset = listar_dataset()
+    if not dataset:
+        return jsonify({"ok": False, "error": "No hay fotos para descargar"}), 400
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for clase, fotos in dataset.items():
+            for nombre in fotos:
+                zf.write(
+                    os.path.join(CAPTURES_DIR, clase, nombre),
+                    arcname=os.path.join(clase, nombre),
+                )
     buffer.seek(0)
 
-    nombre_zip = f"capturas_realsense_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    nombre_zip = f"dataset_realsense_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
     return send_file(
         buffer,
         mimetype="application/zip",
@@ -246,13 +351,27 @@ def api_descargar_todas():
     )
 
 
-@app.route("/api/eliminar/<path:nombre>", methods=["POST"])
-def api_eliminar(nombre):
-    ruta = os.path.join(CAPTURES_DIR, nombre)
-    if os.path.isfile(ruta) and os.path.dirname(ruta) == CAPTURES_DIR:
+@app.route("/api/eliminar/<clase>/<path:nombre>", methods=["POST"])
+def api_eliminar(clase, nombre):
+    carpeta = ruta_segura(clase)
+    ruta = os.path.join(carpeta, nombre)
+    if os.path.isfile(ruta):
         os.remove(ruta)
+        if not os.listdir(carpeta):
+            os.rmdir(carpeta)
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "Archivo no encontrado"}), 404
+
+
+@app.route("/api/eliminar_clase/<clase>", methods=["POST"])
+def api_eliminar_clase(clase):
+    carpeta = ruta_segura(clase)
+    if not os.path.isdir(carpeta):
+        return jsonify({"ok": False, "error": "Clase no encontrada"}), 404
+    for f in os.listdir(carpeta):
+        os.remove(os.path.join(carpeta, f))
+    os.rmdir(carpeta)
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
